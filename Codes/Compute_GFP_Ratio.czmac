@@ -1,0 +1,118 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Script>
+  <Context>Zen26</Context>
+  <Version>1.0</Version>
+  <Language>Python</Language>
+  <Text>#######################################################
+## I M A G E   P R O C E S S I N G
+##
+## Macro name: Compute_GFP_Ratio.czmac
+##
+## Author: ZSPANIYA@APAC Digital Solutions
+##
+## TAKES THE INPUT IMAGE 
+## ANALYZE IMAGE WITH USER-DEFINED IMAGE ANALYSIS SETTING
+## GENERATE A TABLE WITH NUCLEAR GFP AS A PERCENT OF TOTAL GFP
+##
+## Copyright (c) 2020 by Carl Zeiss Microscopy GmbH.
+## Permission is granted to use, modify and distribute this code,
+## as long as this copyright notice remains part of the code.
+#######################################################
+##
+## Import required libraries
+from System.IO import File, Directory, Path
+import sys
+##
+## User-defined function to get short names(without folder path) for the analysis setting
+def getshortfiles(filelist):
+    files_short = []
+    for short in filelist:
+        files_short.append(Path.GetFileName(short))
+    
+    return files_short
+##
+## clear the macro edictor console output
+Zen.Application.MacroEditor.ClearMessages()
+##
+## Load the active image on ZEN
+image=Zen.Application.Documents.ActiveDocument
+##
+## Check the location of folder where experiment setups and image analysis settings are stored
+docfolder = Zen.Application.Environment.GetFolderPath(ZenSpecialFolder.WorkgroupDocuments)
+## Get list with all existing image analysis setups and a short version of that list
+ipfiles = Directory.GetFiles(Path.Combine(docfolder, 'Image Analysis Settings'),'*.czias')
+ipfiles_short = getshortfiles(ipfiles)
+##
+## Set up the GUI dialog window
+GUIDialog = ZenWindow()
+GUIDialog.Initialize('Compute Nuclear GFP ratio')
+## Add components to GUI dialog
+GUIDialog.AddLabel('Select Image Analysis Workflow to detect objects')
+GUIDialog.AddDropDown('ias_name', 'Image Analysis Workflow', ipfiles_short, 2)
+##
+## Show the GUI window
+result = GUIDialog.Show()
+## Print message if the macro is cancelled
+if result.HasCanceled:
+    message = 'Macro was canceled by user.'
+    print(message)
+    raise SystemExit
+##
+## Else execute the macro
+else:
+    ## Get the values from GUI dialog and store them
+    ## Image analysis setting chosen by the user
+    iasName = str(result.GetValue('ias_name'))
+    ## print(iasName)   
+    ## Analyze the active image using the chosen image analysis setting
+    ias=ZenImageAnalysisSetting()
+    ias.Load(iasName)
+    Zen.Analyzing.Analyze(image,ias)
+    classNames = ias.GetRegionClassNames()
+    ## Create Region Table based on the image analysis
+    table_TotalGFP = Zen.Analyzing.CreateRegionTable(image,classNames[2])
+    table_NuclearGFP = Zen.Analyzing.CreateRegionTable(image,classNames[4])
+    ## Add table to Zen Active Documents
+    ## Zen.Application.Documents.Add(table_TotalGFP)
+    ## Zen.Application.Documents.Add(table_NuclearGFP)
+    ## Get values of TotalGFP and NuclearGFP
+    ID_column = table_TotalGFP.Columns[0]
+    TotalGFP = table_TotalGFP.Columns[1]
+    NuclearGFP = table_TotalGFP.Columns[2]
+    ID_index = table_TotalGFP.Columns.IndexOf(ID_column)
+    indexIntensityColumn_TotalGFP=table_TotalGFP.Columns.IndexOf(TotalGFP)
+    indexIntensityColumn_NuclearGFP=table_TotalGFP.Columns.IndexOf(NuclearGFP)
+    ## Create a new table to display relevant data and nuclear GFP percent     
+    zt=ZenTable('Percent Nuclear GFP Table')
+    zt.Columns.Add('ID')
+    zt.Columns.Add('Nuclear GFP Intensity')
+    zt.Columns.Add('Total GFP Intensity')
+    zt.Columns.Add('Percent of Nuclear GFP')
+    avg_NuclearGFP_percent = 0
+    ## Copying required data to newly created Zen table
+    for i in range(table_TotalGFP.RowCount):
+        ID_value = table_TotalGFP.GetValue(i,ID_index)
+        NuclearGFP_value = table_TotalGFP.GetValue(i,indexIntensityColumn_NuclearGFP)
+        TotalGFP_value = table_TotalGFP.GetValue(i,indexIntensityColumn_TotalGFP)
+        zt.SetValue(i,0,ID_value)
+        zt.SetValue(i,1,NuclearGFP_value)
+        zt.SetValue(i,2,TotalGFP_value)
+        nuclearGFP_percent = 100*(NuclearGFP_value/TotalGFP_value)
+        zt.SetValue(i,3,nuclearGFP_percent)
+        avg_NuclearGFP_percent = avg_NuclearGFP_percent+nuclearGFP_percent
+    Zen.Application.Documents.Add(zt)
+    avg_NuclearGFP_percent = (avg_NuclearGFP_percent/table_TotalGFP.RowCount)
+    showText = 'Percent Nuclear GFP for the image is: ' + str(avg_NuclearGFP_percent) + '%'
+    Zen.Application.Pause(showText)
+##
+#######################################################
+
+
+
+</Text>
+  <Author></Author>
+  <Description></Description>
+  <Keywords></Keywords>
+  <Row>85</Row>
+  <Column>45</Column>
+</Script>
